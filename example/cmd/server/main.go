@@ -1,0 +1,38 @@
+package main
+
+import (
+	"fmt"
+	"github.com/raspi/jumiks/pkg/server"
+	error2 "github.com/raspi/jumiks/pkg/server/error"
+	"time"
+)
+
+func main() {
+	var errors chan error2.Error
+
+	l, err := server.New("@test", 1000, errors)
+	if err != nil {
+		panic(err)
+	}
+
+	go l.Listen()
+
+	counter := 0
+
+	for {
+		select {
+		case err := <-errors:
+			fmt.Printf(`got error %v`+"\n", err)
+		default:
+			// do nothing
+
+			msg := fmt.Sprintf("hello, world %d!", counter)
+			l.SendToAll([]byte(msg))
+			fmt.Printf(`sent %q`+"\n", msg)
+
+			time.Sleep(time.Millisecond * 500)
+			counter++
+		}
+	}
+
+}
