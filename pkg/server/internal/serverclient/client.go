@@ -1,37 +1,36 @@
 package serverclient
 
 import (
+	"bytes"
 	"encoding/binary"
 	error2 "github.com/raspi/jumiks/pkg/server/error"
 	"github.com/raspi/jumiks/pkg/server/header"
-	"log"
 	"math/rand"
 	"net"
-	"os"
 	"time"
 )
 
 // ServerClient is a client connected to a server
 // it is used internally to track connected client
 type ServerClient struct {
-	conn          *net.UnixConn
-	connectedAt   time.Time
-	lastPacket    uint64
-	uuid          uint64
-	writeMessages chan []byte
-	errors        chan error2.Error
-	logger        *log.Logger
+	conn                 *net.UnixConn
+	connectedAt          time.Time
+	lastPacket           uint64 // Last packet ID processed
+	uuid                 uint64 // UUID for this client
+	writeMessages        chan []byte
+	errors               chan error2.Error
+	tooSlowPacketsBehind uint64
 }
 
-func NewClient(conn *net.UnixConn, errors chan error2.Error) (c *ServerClient) {
+func NewClient(conn *net.UnixConn, errors chan error2.Error, tooSlowPacketsBehind uint64) (c *ServerClient) {
 	c = &ServerClient{
-		logger:        log.New(os.Stdout, `client `, log.LstdFlags),
-		conn:          conn,
-		connectedAt:   time.Now(),
-		uuid:          rand.Uint64(),
-		errors:        errors,
-		writeMessages: make(chan []byte),
-		lastPacket:    0,
+		conn:                 conn,
+		connectedAt:          time.Now(),
+		uuid:                 rand.Uint64(),
+		errors:               errors,
+		writeMessages:        make(chan []byte),
+		lastPacket:           0,
+		tooSlowPacketsBehind: tooSlowPacketsBehind,
 	}
 
 	return c
@@ -40,12 +39,30 @@ func NewClient(conn *net.UnixConn, errors chan error2.Error) (c *ServerClient) {
 func (c *ServerClient) Listen() {
 	defer c.conn.Close()
 
+	buffer := make([]byte, 1048576)
+
 	for {
-		c.logger.Printf(`reading message header `)
-		var hdr header.MessageHeaderFromClient
-		err := binary.Read(c.conn, binary.LittleEndian, &hdr)
+		rb, err := c.conn.Read(buffer)
 		if err != nil {
 			c.errors <- error2.New(err)
+			break
+		}
+
+		if rb == 0 {
+			continue
+		}
+
+		buf := bytes.NewBuffer(buffer[:rb])
+
+		var hdr header.MessageHeaderFromClient
+		err = binary.Read(buf, binary.LittleEndian, &hdr)
+		if err != nil {
+			c.errors <- error2.New(err)
+			break
+		}
+
+		if c.lastPacket != 0 && (hdr.PacketId-c.lastPacket) > c.tooSlowPacketsBehind {
+			// We are too slow
 			break
 		}
 

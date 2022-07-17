@@ -8,9 +8,7 @@ import (
 	error2 "github.com/raspi/jumiks/pkg/server/error"
 	"github.com/raspi/jumiks/pkg/server/header"
 	"github.com/raspi/jumiks/pkg/server/internal/serverclient"
-	"log"
 	"net"
-	"os"
 	"sync"
 	"syscall"
 )
@@ -22,7 +20,6 @@ const ConnType = `unixpacket`
 const StartPacketId = uint64(100000)
 
 type Server struct {
-	logger               *log.Logger
 	listener             *net.UnixListener                     // Listening unix domain socket
 	clients              map[uint64]*serverclient.ServerClient // Connected clients
 	packetId             uint64                                // Packet tracking ID
@@ -30,7 +27,6 @@ type Server struct {
 	tooSlowPacketsBehind uint64                                // How many packets can connected client lag behind
 	messagesCh           chan []byte                           // messages sent to connected clients
 	connectionNew        chan *net.UnixConn
-	connectionClose      chan uint64
 	lock                 sync.Mutex
 }
 
@@ -53,16 +49,14 @@ func New(name string, tooSlowPacketsBehind uint64, errch chan error2.Error) (s *
 	conn.SetUnlinkOnClose(true)
 
 	s = &Server{
-		logger:               log.New(os.Stdout, ``, log.LstdFlags),
 		listener:             conn,
 		packetId:             StartPacketId,
 		errch:                errch,
 		tooSlowPacketsBehind: tooSlowPacketsBehind,
-		clients:              make(map[uint64]*serverclient.ServerClient),
+		clients:              make(map[uint64]*serverclient.ServerClient), // connected clients
 		connectionNew:        make(chan *net.UnixConn),
-		connectionClose:      make(chan uint64),
-		messagesCh:           make(chan []byte),
-		lock:                 sync.Mutex{},
+		messagesCh:           make(chan []byte), // Messages sent to all connected clients
+		lock:                 sync.Mutex{},      // Lock when global state changes
 	}
 
 	return s, nil
@@ -73,13 +67,11 @@ func (s *Server) listenConnections() {
 
 	for {
 		// New connection
-		s.logger.Printf(`listening for new connection`)
 		conn, err := s.listener.AcceptUnix()
 		if err != nil {
 			s.errch <- error2.New(err)
 			continue
 		}
-		s.logger.Printf(`new connection, sending handshake`)
 
 		// handshake for determining that client speaks the same protocol
 
@@ -111,7 +103,6 @@ func (s *Server) listenConnections() {
 			continue
 		}
 
-		s.logger.Printf(`handshake ok`)
 		s.connectionNew <- conn
 	}
 }
@@ -140,30 +131,27 @@ func generateMsg(pId uint64, msg []byte) []byte {
 }
 
 func (s *Server) Listen() {
+	// Listen on new connections (non-blocking)
 	go s.listenConnections()
 
 	for {
 		select {
-		case err := <-s.errch:
-			s.logger.Printf(`error: %v`, err)
 		case msg := <-s.messagesCh: // new message
-			s.logger.Printf(`received message from channel`)
-
 			for clientId, client := range s.clients {
-				s.logger.Printf(`client %v`, client.GetId())
 				if client == nil {
-					s.logger.Printf(`client is nil!`)
-
 					client.Close()
 					delete(s.clients, clientId)
 					continue
 				}
 
 				// Send the buffer to client
-				s.logger.Printf(`writing to client`)
 				wb, err := client.Write(msg)
 				if err != nil {
 					if errors.Is(err, syscall.EPIPE) {
+						client.Close()
+						delete(s.clients, clientId)
+						continue
+					} else if errors.Is(err, net.ErrClosed) {
 						client.Close()
 						delete(s.clients, clientId)
 						continue
@@ -178,11 +166,9 @@ func (s *Server) Listen() {
 			}
 
 		case conn := <-s.connectionNew:
-			s.logger.Printf(`adding client`)
-			c := serverclient.NewClient(conn, s.errch)
+			c := serverclient.NewClient(conn, s.errch, s.tooSlowPacketsBehind)
 			go c.Listen()
 			s.clients[c.GetId()] = c
-			s.logger.Printf(`client added`)
 
 		default:
 
@@ -199,6 +185,7 @@ func (s *Server) SendToAll(msg []byte) {
 	s.lock.Unlock()
 }
 
+// Close closes all connected clients and then closes the listener
 func (s *Server) Close() error {
 	var del []uint64
 

@@ -52,6 +52,7 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, `error: %v`, err)
 		os.Exit(1)
 	}
+	defer c.Close()
 
 	go c.Listen()
 
@@ -67,5 +68,4 @@ func main() {
 		}
 	}
 
-	c.Close()
 }

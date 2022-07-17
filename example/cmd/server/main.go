@@ -14,6 +14,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer l.Close()
 
 	go l.Listen()
 
@@ -34,7 +35,5 @@ func main() {
 			counter++
 		}
 	}
-
-	l.Close()
 
 }
