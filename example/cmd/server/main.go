@@ -10,7 +10,7 @@ import (
 func main() {
 	var errors chan error2.Error
 
-	l, err := server.New("@test", 1000, errors)
+	l, err := server.New("@test", 5, errors)
 	if err != nil {
 		panic(err)
 	}

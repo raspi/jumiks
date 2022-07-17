@@ -62,6 +62,7 @@ func New(name string, tooSlowPacketsBehind uint64, errch chan error2.Error) (s *
 	return s, nil
 }
 
+// listenConnections listens on new connections to this server
 func (s *Server) listenConnections() {
 	defer s.listener.Close()
 
@@ -107,6 +108,7 @@ func (s *Server) listenConnections() {
 	}
 }
 
+// generateMsg generates a new message which has a header
 func generateMsg(pId uint64, msg []byte) []byte {
 	var buf bytes.Buffer
 
@@ -137,12 +139,19 @@ func (s *Server) Listen() {
 	for {
 		select {
 		case msg := <-s.messagesCh: // new message
+			s.lock.Lock()
+			packetId := s.packetId
+			s.lock.Unlock()
+
+			msg = generateMsg(packetId, msg)
+
 			for clientId, client := range s.clients {
 				if client == nil {
-					client.Close()
 					delete(s.clients, clientId)
 					continue
 				}
+
+				client.SetPacketId(packetId)
 
 				// Send the buffer to client
 				wb, err := client.Write(msg)
@@ -163,9 +172,10 @@ func (s *Server) Listen() {
 				if wb == 0 {
 					panic(`no bytes written`)
 				}
+
 			}
 
-		case conn := <-s.connectionNew:
+		case conn := <-s.connectionNew: // Add new connection
 			c := serverclient.NewClient(conn, s.errch, s.tooSlowPacketsBehind)
 			go c.Listen()
 			s.clients[c.GetId()] = c
@@ -175,7 +185,7 @@ func (s *Server) Listen() {
 
 // SendToAll sends a message to every connected client
 func (s *Server) SendToAll(msg []byte) {
-	s.messagesCh <- generateMsg(s.packetId, msg)
+	s.messagesCh <- msg
 
 	s.lock.Lock()
 	s.packetId++
@@ -187,13 +197,21 @@ func (s *Server) Close() error {
 	var del []uint64
 
 	for i, c := range s.clients {
-		c.Close()
+		if c != nil {
+			err := c.Close()
+			if err != nil {
+				s.errch <- error2.New(err)
+			}
+		}
+
 		del = append(del, i)
 	}
 
+	// Remove all
 	for _, i := range del {
 		delete(s.clients, i)
 	}
 
+	// Close the main socket listener
 	return s.listener.Close()
 }

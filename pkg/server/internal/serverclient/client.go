@@ -7,6 +7,7 @@ import (
 	"github.com/raspi/jumiks/pkg/server/header"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type ServerClient struct {
 	writeMessages        chan []byte
 	errors               chan error2.Error
 	tooSlowPacketsBehind uint64
+	lock                 sync.Mutex
 }
 
 func NewClient(conn *net.UnixConn, errors chan error2.Error, tooSlowPacketsBehind uint64) (c *ServerClient) {
@@ -31,6 +33,7 @@ func NewClient(conn *net.UnixConn, errors chan error2.Error, tooSlowPacketsBehin
 		writeMessages:        make(chan []byte),
 		lastPacket:           0,
 		tooSlowPacketsBehind: tooSlowPacketsBehind,
+		lock:                 sync.Mutex{},
 	}
 
 	return c
@@ -60,14 +63,21 @@ func (c *ServerClient) Listen() {
 			c.errors <- error2.New(err)
 			break
 		}
+		buf.Reset()
 
-		if c.lastPacket != 0 && (hdr.PacketId-c.lastPacket) > c.tooSlowPacketsBehind {
+		packetsBehind := uint64(0)
+
+		if c.lastPacket != 0 && c.lastPacket != hdr.PacketId {
+			c.lock.Lock()
+			packetsBehind = c.lastPacket - hdr.PacketId
+			c.lock.Unlock()
+		}
+
+		if packetsBehind > c.tooSlowPacketsBehind {
 			// We are too slow
 			break
 		}
 
-		// Track packet ID
-		c.lastPacket = hdr.PacketId
 	}
 }
 
@@ -81,4 +91,11 @@ func (c *ServerClient) Write(b []byte) (int, error) {
 
 func (c *ServerClient) Close() error {
 	return c.conn.Close()
+}
+
+// SetPacketId sets Packet ID from the server side for tracking too slow processing
+func (c *ServerClient) SetPacketId(pid uint64) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.lastPacket = pid
 }
