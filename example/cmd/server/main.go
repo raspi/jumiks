@@ -35,4 +35,6 @@ func main() {
 		}
 	}
 
+	l.Close()
+
 }

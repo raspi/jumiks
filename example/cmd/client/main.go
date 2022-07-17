@@ -1,9 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/raspi/jumiks/pkg/client"
+	"io"
+	"net"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -36,10 +40,14 @@ func (c *ExampleClient) on_msg(b []byte) {
 	c.delay += time.Millisecond * 50
 }
 
-func main() {
-	errors := make(chan error)
+func (c *ExampleClient) Close() error {
+	return c.c.Close()
+}
 
-	c, err := New("@test", errors)
+func main() {
+	errorch := make(chan error)
+
+	c, err := New("@test", errorch)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, `error: %v`, err)
 		os.Exit(1)
@@ -47,7 +55,17 @@ func main() {
 
 	go c.Listen()
 
-	for err := range errors {
+	for err := range errorch {
 		fmt.Printf(`got error: %v`, err)
+
+		if errors.Is(err, io.EOF) {
+			break
+		} else if errors.Is(err, syscall.EPIPE) {
+			break
+		} else if errors.Is(err, net.ErrClosed) {
+			break
+		}
 	}
+
+	c.Close()
 }

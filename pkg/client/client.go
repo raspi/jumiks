@@ -9,6 +9,7 @@ import (
 	"github.com/raspi/jumiks/pkg/server/header"
 	"io"
 	"net"
+	"syscall"
 )
 
 type Client struct {
@@ -54,6 +55,12 @@ func (c *Client) Listen() {
 		rb, err := c.conn.Read(buffer)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				// EOF
+				break
+			} else if errors.Is(err, net.ErrClosed) {
+				break
+			} else if errors.Is(err, syscall.EPIPE) {
+				// Broken pipe
 				break
 			}
 
@@ -125,6 +132,10 @@ func (c *Client) Listen() {
 // handleMsg sends received message to end-user
 func (c *Client) handleMsg(b []byte) {
 	c.hfn(b)
+}
+
+func (c *Client) Close() error {
+	return c.conn.Close()
 }
 
 // handshake determines if both server.Server and Client are speaking the same protocol

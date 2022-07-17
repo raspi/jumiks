@@ -148,23 +148,24 @@ func (s *Server) Listen() {
 			s.logger.Printf(`error: %v`, err)
 		case msg := <-s.messagesCh: // new message
 			s.logger.Printf(`received message from channel`)
-			s.lock.Lock()
-			pId := s.packetId
-			s.lock.Unlock()
 
 			for clientId, client := range s.clients {
+				s.logger.Printf(`client %v`, client.GetId())
 				if client == nil {
 					s.logger.Printf(`client is nil!`)
-					s.connectionClose <- clientId
+
+					client.Close()
+					delete(s.clients, clientId)
 					continue
 				}
 
 				// Send the buffer to client
 				s.logger.Printf(`writing to client`)
-				wb, err := client.Write(generateMsg(pId, msg))
+				wb, err := client.Write(msg)
 				if err != nil {
 					if errors.Is(err, syscall.EPIPE) {
-						s.connectionClose <- clientId
+						client.Close()
+						delete(s.clients, clientId)
 						continue
 					}
 
@@ -183,18 +184,6 @@ func (s *Server) Listen() {
 			s.clients[c.GetId()] = c
 			s.logger.Printf(`client added`)
 
-		case cId := <-s.connectionClose:
-			s.logger.Printf(`!!!! disconnecting client #%v`, cId)
-
-			/*
-				err := s.clients[cId].Close()
-				if err != nil {
-					s.errch <- error2.New(err)
-				}
-
-			*/
-
-			delete(s.clients, cId)
 		default:
 
 		}
@@ -203,11 +192,24 @@ func (s *Server) Listen() {
 
 // SendToAll sends a message to every connected client
 func (s *Server) SendToAll(msg []byte) {
-	if len(msg) > 0 {
-		s.messagesCh <- msg
-	}
+	s.messagesCh <- generateMsg(s.packetId, msg)
 
 	s.lock.Lock()
 	s.packetId++
 	s.lock.Unlock()
+}
+
+func (s *Server) Close() error {
+	var del []uint64
+
+	for i, c := range s.clients {
+		c.Close()
+		del = append(del, i)
+	}
+
+	for _, i := range del {
+		delete(s.clients, i)
+	}
+
+	return s.listener.Close()
 }

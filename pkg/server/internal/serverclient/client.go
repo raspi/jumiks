@@ -41,6 +41,7 @@ func (c *ServerClient) Listen() {
 	defer c.conn.Close()
 
 	for {
+		c.logger.Printf(`reading message header `)
 		var hdr header.MessageHeaderFromClient
 		err := binary.Read(c.conn, binary.LittleEndian, &hdr)
 		if err != nil {
@@ -59,4 +60,8 @@ func (c *ServerClient) GetId() uint64 {
 
 func (c *ServerClient) Write(b []byte) (int, error) {
 	return c.conn.Write(b)
+}
+
+func (c *ServerClient) Close() error {
+	return c.conn.Close()
 }
