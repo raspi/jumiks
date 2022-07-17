@@ -169,9 +169,6 @@ func (s *Server) Listen() {
 			c := serverclient.NewClient(conn, s.errch, s.tooSlowPacketsBehind)
 			go c.Listen()
 			s.clients[c.GetId()] = c
-
-		default:
-
 		}
 	}
 }
