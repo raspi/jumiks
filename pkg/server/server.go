@@ -8,6 +8,7 @@ import (
 	error2 "github.com/raspi/jumiks/pkg/server/error"
 	"github.com/raspi/jumiks/pkg/server/header"
 	"github.com/raspi/jumiks/pkg/server/internal/serverclient"
+	"io"
 	"net"
 	"sync"
 	"syscall"
@@ -156,16 +157,21 @@ func (s *Server) Listen() {
 				// Send the buffer to client
 				wb, err := client.Write(msg)
 				if err != nil {
-					if errors.Is(err, syscall.EPIPE) {
-						client.Close()
+					if errors.Is(err, io.EOF) {
+						_ = client.Close()
+						delete(s.clients, clientId)
+						continue
+					} else if errors.Is(err, syscall.EPIPE) {
+						_ = client.Close()
 						delete(s.clients, clientId)
 						continue
 					} else if errors.Is(err, net.ErrClosed) {
-						client.Close()
+						_ = client.Close()
 						delete(s.clients, clientId)
 						continue
 					}
 
+					// Shouldn't happen
 					panic(err)
 				}
 
