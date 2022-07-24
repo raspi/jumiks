@@ -25,8 +25,6 @@ func main() {
 		case err := <-errors:
 			fmt.Printf(`got error %v`+"\n", err)
 		default:
-			// do nothing
-
 			msg := fmt.Sprintf("hello, world %d!", counter)
 			l.SendToAll([]byte(msg))
 			fmt.Printf(`sent %q`+"\n", msg)
