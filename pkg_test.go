@@ -52,6 +52,13 @@ func TestServerAndClient(t *testing.T) {
 		if string(got) != string(want) {
 			t.Fail()
 		}
+
+	case err := <-cerrs: // We shouldn't receive any errors from client
+		t.Fatal(err)
+
+	case err := <-errs: // We shouldn't receive any errors from server
+		t.Fatal(err)
+
 	case <-timeout:
 		t.Fatalf(`test timed out`)
 	}
