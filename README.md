@@ -1,5 +1,11 @@
 # jumiks
 
+![GitHub All Releases](https://img.shields.io/github/downloads/raspi/jumiks/total?style=for-the-badge)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/raspi/jumiks?style=for-the-badge)
+![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/raspi/jumiks?style=for-the-badge)
+[![Go Report Card](https://goreportcard.com/badge/github.com/raspi/jumiks)](https://goreportcard.com/report/github.com/raspi/jumiks)
+
+
 Local `AF_UNIX` [unix domain socket](https://en.wikipedia.org/wiki/Unix_domain_socket) server and client which uses TCP-style `SOCK_SEQPACKET` (`unixpacket` in Go) packets for sending messages from one server to multiple clients.
 
 See [example](example) directory for example.
