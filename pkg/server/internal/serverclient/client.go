@@ -20,7 +20,7 @@ type ServerClient struct {
 	uuid                 uint64 // UUID for this client
 	writeMessages        chan []byte
 	errors               chan error2.Error
-	tooSlowPacketsBehind uint64
+	tooSlowPacketsBehind uint64 // How many packets client can lag behind
 	lock                 sync.Mutex
 }
 
