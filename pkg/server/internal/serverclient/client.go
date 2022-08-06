@@ -12,7 +12,7 @@ import (
 )
 
 // ServerClient is a client connected to a server
-// it is used internally to track connected client
+// it is used internally by server.Server to track connected client
 type ServerClient struct {
 	conn                 *net.UnixConn
 	connectedAt          time.Time

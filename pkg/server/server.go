@@ -21,14 +21,15 @@ const ConnType = `unixpacket`
 // StartPacketId determines the starting packet ID for Server
 const StartPacketId = uint64(100000)
 
+// Server listens on unix domain socket for client.Client connections
 type Server struct {
 	listener             *net.UnixListener                     // Listening unix domain socket
 	clients              map[uint64]*serverclient.ServerClient // Connected clients
 	packetId             uint64                                // Packet tracking ID
 	errch                chan error2.Error                     // Errors
 	tooSlowPacketsBehind uint64                                // How many packets can connected client lag behind
-	messagesCh           chan []byte                           // messages sent to connected clients
-	connectionNew        chan *net.UnixConn
+	messagesCh           chan []byte                           // Channel for messages sent to all connected clients
+	connectionNew        chan *net.UnixConn                    // Channel which is used to add new connections to the Server.clients connection pool
 	lock                 sync.Mutex
 }
 
