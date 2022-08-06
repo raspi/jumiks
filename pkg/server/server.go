@@ -12,6 +12,7 @@ import (
 	"net"
 	"sync"
 	"syscall"
+	"time"
 )
 
 // ConnType determines unix domain socket communication type
@@ -75,37 +76,63 @@ func (s *Server) listenConnections() {
 			continue
 		}
 
-		// handshake for determining that client speaks the same protocol
+		// Kick client out if handshake takes too long.
+		timeout := time.After(time.Second * 5)
+		connOk := make(chan bool)
 
-		// Send our handshake
-		shake := header.Handshake{
-			Version: header.DefaultVersion,
-		}
-		err = binary.Write(conn, binary.LittleEndian, shake)
-		if err != nil {
-			conn.Close()
+		go func(conn *net.UnixConn, connOk chan bool) {
+			// handshake for determining that client speaks the same protocol
+
+			// Send our handshake
+			shake := header.Handshake{
+				Version: header.DefaultVersion,
+			}
+			err = binary.Write(conn, binary.LittleEndian, shake)
+			if err != nil {
+				connOk <- false
+				return
+			}
+
+			// Read client's handshake
+			var clientShake header.Handshake
+			err = binary.Read(conn, binary.LittleEndian, &clientShake)
+			if err != nil {
+				connOk <- false
+				return
+			}
+
+			// Compare protocol version
+			if shake.Version.Major != clientShake.Version.Major {
+				connOk <- false
+				return
+			}
+
+			if shake.Version.Minor != clientShake.Version.Minor {
+				connOk <- false
+				return
+			}
+
+			connOk <- true
+		}(conn, connOk)
+
+		select {
+		case <-timeout:
+			_ = conn.Close()
+			s.errch <- error2.New(fmt.Errorf(`handshake timed out`))
 			continue
+		case isOk := <-connOk:
+			if !isOk {
+				// Handshake failed
+				_ = conn.Close()
+				s.errch <- error2.New(fmt.Errorf(`handshake failed`))
+				close(connOk)
+				continue
+			}
+
+			// Add client
+			s.connectionNew <- conn
 		}
 
-		// Read client's handshake
-		var clientShake header.Handshake
-		err = binary.Read(conn, binary.LittleEndian, &clientShake)
-		if err != nil {
-			conn.Close()
-			continue
-		}
-
-		if shake.Version.Major != clientShake.Version.Major {
-			conn.Close()
-			continue
-		}
-
-		if shake.Version.Minor != clientShake.Version.Minor {
-			conn.Close()
-			continue
-		}
-
-		s.connectionNew <- conn
 	}
 }
 
