@@ -1,6 +1,5 @@
 # jumiks
 
-![GitHub All Releases](https://img.shields.io/github/downloads/raspi/jumiks/total?style=for-the-badge)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/raspi/jumiks?style=for-the-badge)
 ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/raspi/jumiks?style=for-the-badge)
 [![Go Report Card](https://goreportcard.com/badge/github.com/raspi/jumiks)](https://goreportcard.com/report/github.com/raspi/jumiks)
